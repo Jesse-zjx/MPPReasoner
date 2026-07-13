@@ -596,10 +596,21 @@ def compute_reward(
         else (1.0 if predicted_label_str == "true" else 0.0)
     )
     true_label_float = _parse_ground_truth(ground_truth)
-    if predicted_label_float is not None and true_label_float is not None:
-        r_ans = predicted_label_float == true_label_float
+
+    # reasoning block and a parseable <answer> prediction.
     if think_content is not None and predicted_label_float is not None:
         r_fmt = 1.0
+
+    # --- Correctness gating ---
+    if predicted_label_float is None or true_label_float is None:
+        # Malformed output: missing reasoning block or unparseable prediction.
+        total_reward = -1.5
+    elif predicted_label_float != true_label_float:
+        # Incorrect prediction: no auxiliary reward is accumulated.
+        total_reward = -1.0
+    else:
+        # Correct prediction: evaluate and add reasoning and chemistry layers.
+        r_ans = 1.0
         if check_text_contains_any(think_content, WEIGHING_TERMS):
             if predicted_label_float == 1.0 and check_text_contains_any(
                 think_content, AFFIRMATIVE_CONFIRMATION_TERMS
@@ -612,12 +623,11 @@ def compute_reward(
         r_comp = check_comparative_analysis(think_content, extra_info["few_shot_examples"])
         r_prin = check_chemical_principle_application(think_content, extra_info["smiles"])
         r_struct = check_molecular_structure_analysis(think_content, extra_info["smiles"])
-
-    total_reward = (
-        lambda1 * (r_ans + r_fmt)
-        + lambda2 * (r_cons + r_comp)
-        + lambda3 * (r_prin + r_struct)
-    )
+        total_reward = (
+            lambda1 * (r_ans + r_fmt)
+            + lambda2 * (r_cons + r_comp)
+            + lambda3 * (r_prin + r_struct)
+        )
 
     return {
         "score": total_reward,
